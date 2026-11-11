@@ -1,0 +1,10 @@
+{
+  "domain": "mvm_meter_stat_import",
+  "name": "MVM Smart Meter Statistics Import",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["recorder"],
+  "documentation": "https://github.com/Azakmi/ha-mvm-meter-stat-import",
+  "iot_class": "local_polling",
+  "version": "0.1.0"
+}
