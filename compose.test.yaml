@@ -1,0 +1,16 @@
+services:
+  homeassistant:
+    container_name: mvm-ha-test
+    image: ghcr.io/home-assistant/home-assistant:stable
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8123:8123"
+    volumes:
+      - ha_config:/config
+      - ./custom_components/mvm_meter_stat_import:/config/custom_components/mvm_meter_stat_import:ro
+      - ./example_data:/config/mvm_test:ro
+    environment:
+      TZ: Europe/Budapest
+
+volumes:
+  ha_config:

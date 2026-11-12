@@ -8,6 +8,16 @@ Energy dashboard.
 Copy `custom_components/mvm_meter_stat_import` into the Home Assistant
 configuration's `custom_components` directory, then restart Home Assistant.
 
+### Local test instance with Docker Compose
+
+Start Docker, then run `docker compose -f compose.test.yaml up -d` from the
+repository root. The test instance is available only from this machine at
+`http://localhost:8123`; its Home Assistant configuration is kept in a named
+Docker volume, and the integration and example CSVs are mounted read-only.
+Configure the integration with the report directory `/config/mvm_test`.
+Stop it with `docker compose -f compose.test.yaml down` (the named configuration
+volume is retained).
+
 In **Settings → Devices & services → Add integration**, select **MVM Smart Meter
 Statistics Import** and enter a folder path on the Home Assistant host. The
 folder must already contain at least one valid MVM report. Keep reports for one
