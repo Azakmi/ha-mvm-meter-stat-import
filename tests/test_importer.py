@@ -112,6 +112,37 @@ class ReportImporterTests(unittest.TestCase):
             self.assertEqual(stats[0]["sum"], 0.3)
             self.assertEqual(stats[1]["sum"], 0.6)
 
+    def test_interval_net_rows_are_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            _write_report(
+                directory,
+                "intervals.csv",
+                [
+                    ("2026. 11. 01. 10:00", "Vételezett", "0.1"),
+                    ("2026. 11. 01. 10:00", "Visszatáplált", "0.2"),
+                    ("2026. 11. 01. 10:00", "Szaldó", "-0.1"),
+                    ("2026. 11. 01.", "Szaldó", "-10"),
+                ],
+                1_000_000_000,
+            )
+
+            data = load_reports(directory, "Europe/Budapest")
+
+            self.assertEqual(
+                [reading.value for reading in data.series["interval_import"]],
+                [Decimal("0.1")],
+            )
+            self.assertEqual(
+                [reading.value for reading in data.series["interval_export"]],
+                [Decimal("0.2")],
+            )
+            self.assertNotIn("interval_net", data.series)
+            self.assertEqual(
+                [reading.value for reading in data.series["daily_net"]],
+                [Decimal("-10")],
+            )
+
     def test_signed_daily_net_readings_are_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             directory = Path(temp_dir)

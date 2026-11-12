@@ -58,7 +58,9 @@ during setup. Leave both fields blank for users without an annual saldo cycle.
 The reports use a semicolon delimiter and the MVM column names shown in
 `example_data`. Daily rows (`YYYY. MM. DD.`) are treated as absolute register
 readings. Rows with a time (`YYYY. MM. DD. HH:MM`) are treated as 15-minute
-energy amounts. Values must be measured and expressed in kWh.
+energy amounts. Measured interval `Szaldó` rows are ignored; daily `Szaldó`
+readings are retained. Other imported rows must be measured and expressed in
+kWh.
 
 ## Example data
 
