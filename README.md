@@ -5,8 +5,26 @@ Energy dashboard.
 
 ## Installation
 
-Copy `custom_components/mvm_meter_stat_import` into the Home Assistant
-configuration's `custom_components` directory, then restart Home Assistant.
+From the repository root, run the install helper with the path to your existing
+Home Assistant configuration directory:
+
+```sh
+./scripts/ha-integration install /path/to/home-assistant/config
+```
+
+The helper creates `custom_components` if needed and refuses to replace an
+existing integration directory. To update an existing copy, run:
+
+```sh
+./scripts/ha-integration update /path/to/home-assistant/config
+```
+
+Updating replaces files with matching names in this integration's directory,
+but does not delete extra files there or touch other integrations. Back up any
+local edits to integration files before updating. Restart Home Assistant after
+installing or updating. You can also install manually by copying
+`custom_components/mvm_meter_stat_import` into the Home Assistant
+configuration's `custom_components` directory.
 
 ### Local test instance with Docker Compose
 
