@@ -149,10 +149,7 @@ def load_reports(directory: Path, timezone_name: str) -> MeterData:
                     direction = _DIRECTIONS[direction_name]
                     timestamp, dataset = _parse_timestamp(row["Időpont"])
                     if direction == DIRECTION_NET and dataset != DATASET_DAILY:
-                        raise ReportError(
-                            f"{path.name}:{row_number}: net balance readings must "
-                            "be daily"
-                        )
+                        continue
 
                     unit = (row.get("Mértékegység") or "").strip()
                     if unit != "kWh":
