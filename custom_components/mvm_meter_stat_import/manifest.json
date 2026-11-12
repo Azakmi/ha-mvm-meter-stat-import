@@ -5,6 +5,7 @@
   "config_flow": true,
   "dependencies": ["recorder"],
   "documentation": "https://github.com/Azakmi/ha-mvm-meter-stat-import",
+  "issue_tracker": "https://github.com/Azakmi/ha-mvm-meter-stat-import/issues",
   "iot_class": "local_polling",
   "version": "0.1.0"
 }

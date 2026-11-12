@@ -5,6 +5,17 @@ Energy dashboard.
 
 ## Installation
 
+### Install with HACS
+
+This integration can be installed from HACS as a custom repository. In HACS,
+open the menu, select **Custom repositories**, enter
+`Azakmi/ha-mvm-meter-stat-import`, and choose **Integration** as the category.
+Add the repository, then install **MVM Smart Meter Statistics Import**. Restart
+Home Assistant and add the integration from **Settings → Devices & services →
+Add integration**.
+
+### Install manually
+
 From the repository root, run the install helper with the path to your existing
 Home Assistant configuration directory:
 
