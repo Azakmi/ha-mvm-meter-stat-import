@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    printf 'Usage: %s <install|update> <home-assistant-config-directory>\n' "$0"
+}
+
+fail() {
+    printf 'Error: %s\n' "$1" >&2
+    exit 1
+}
+
+if [[ $# -ne 2 ]]; then
+    usage >&2
+    exit 2
+fi
+
+action=$1
+config_path=$2
+case "$action" in
+    install|update) ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac
+
+[[ -d "$config_path" ]] || fail "Home Assistant configuration directory does not exist: $config_path"
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source_dir="$script_dir/../custom_components/mvm_meter_stat_import"
+[[ -f "$source_dir/manifest.json" ]] || fail "Integration source was not found: $source_dir"
+
+config_dir=$(cd -- "$config_path" && pwd)
+custom_components="$config_dir/custom_components"
+if [[ -e "$custom_components" && ! -d "$custom_components" ]]; then
+    fail "custom_components exists but is not a directory: $custom_components"
+fi
+mkdir -p "$custom_components"
+
+target="$custom_components/mvm_meter_stat_import"
+if [[ "$action" == install ]]; then
+    if [[ -e "$target" || -L "$target" ]]; then
+        fail "Integration directory already exists; use 'update' to replace its matching files: $target"
+    fi
+    mkdir "$target"
+    cp -R "$source_dir/." "$target/"
+    printf 'Installed integration to %s\n' "$target"
+else
+    if [[ ! -d "$target" || -L "$target" ]]; then
+        fail "Integration directory does not exist; use 'install' first: $target"
+    fi
+    cp -R "$source_dir/." "$target/"
+    printf 'Updated integration in %s\n' "$target"
+fi
