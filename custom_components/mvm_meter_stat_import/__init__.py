@@ -31,13 +31,13 @@ from .const import (
     STATISTIC_NAMES,
     UPDATE_INTERVAL,
 )
-from .importer import MeterData, ReportError, build_statistics, load_reports
+from .importer import ReportData, ReportError, build_statistics, load_reports
 
 _LOGGER = logging.getLogger(__name__)
-MvmConfigEntry = ConfigEntry[DataUpdateCoordinator[MeterData]]
+MvmConfigEntry = ConfigEntry[DataUpdateCoordinator[ReportData]]
 
 
-class MvmMeterCoordinator(DataUpdateCoordinator[MeterData]):
+class MvmMeterCoordinator(DataUpdateCoordinator[ReportData]):
     """Load reports and refresh the imported long-term statistics."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -51,7 +51,7 @@ class MvmMeterCoordinator(DataUpdateCoordinator[MeterData]):
         self._signature: tuple | None = None
         self.last_successful_refresh: datetime | None = None
 
-    async def _async_update_data(self) -> MeterData:
+    async def _async_update_data(self) -> ReportData:
         """Read reports and replace statistics only when their data changes."""
         try:
             data = await self.hass.async_add_executor_job(
@@ -64,30 +64,31 @@ class MvmMeterCoordinator(DataUpdateCoordinator[MeterData]):
 
         if data.signature != self._signature:
             try:
-                for key in SERIES_KEYS:
-                    readings = data.series[key]
-                    if not readings:
-                        continue
-                    metadata: StatisticMetaData = {
-                        "mean_type": StatisticMeanType.NONE,
-                        "has_sum": True,
-                        "name": f"{data.meter_id} {STATISTIC_NAMES[key]}",
-                        "source": DOMAIN,
-                        "statistic_id": f"{DOMAIN}:{data.meter_id}_{key}",
-                        "unit_class": EnergyConverter.UNIT_CLASS,
-                        "unit_of_measurement": UnitOfEnergy.KILO_WATT_HOUR,
-                    }
-                    async_add_external_statistics(
-                        self.hass,
-                        metadata,
-                        build_statistics(
-                            readings,
-                            cumulative_register=key.startswith(DATASET_DAILY),
-                            signed_register=key == f"{DATASET_DAILY}_{DIRECTION_NET}",
-                            rollover_month=self.entry.data.get(CONF_ROLLOVER_MONTH),
-                            rollover_day=self.entry.data.get(CONF_ROLLOVER_DAY),
-                        ),
-                    )
+                for meter in data.meters.values():
+                    for key in SERIES_KEYS:
+                        readings = meter.series[key]
+                        if not readings:
+                            continue
+                        metadata: StatisticMetaData = {
+                            "mean_type": StatisticMeanType.NONE,
+                            "has_sum": True,
+                            "name": f"{meter.meter_id} {STATISTIC_NAMES[key]}",
+                            "source": DOMAIN,
+                            "statistic_id": f"{DOMAIN}:{meter.meter_id}_{key}",
+                            "unit_class": EnergyConverter.UNIT_CLASS,
+                            "unit_of_measurement": UnitOfEnergy.KILO_WATT_HOUR,
+                        }
+                        async_add_external_statistics(
+                            self.hass,
+                            metadata,
+                            build_statistics(
+                                readings,
+                                cumulative_register=key.startswith(DATASET_DAILY),
+                                signed_register=key == f"{DATASET_DAILY}_{DIRECTION_NET}",
+                                rollover_month=self.entry.data.get(CONF_ROLLOVER_MONTH),
+                                rollover_day=self.entry.data.get(CONF_ROLLOVER_DAY),
+                            ),
+                        )
             except (HomeAssistantError, ValueError) as err:
                 _LOGGER.exception("Unable to import MVM meter statistics")
                 raise UpdateFailed(
@@ -115,3 +116,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: MvmConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: MvmConfigEntry) -> bool:
     """Unload the integration platforms."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: ConfigEntry[DataUpdateCoordinator[ReportData]]
+) -> bool:
+    """Migrate existing entries to folder-based uniqueness."""
+    if entry.version != 1:
+        return False
+
+    directory = Path(entry.data[CONF_DIRECTORY]).expanduser().resolve()
+    hass.config_entries.async_update_entry(
+        entry,
+        unique_id=directory.as_posix(),
+        title=f"MVM reports ({directory.name})",
+        version=2,
+    )
+    return True

@@ -53,9 +53,16 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     async_add_entities(
         [
-            *(MvmEnergySensor(coordinator, description) for description in SENSORS),
-            MvmImportStatusSensor(coordinator),
-            MvmLastSuccessfulRefreshSensor(coordinator),
+            entity
+            for meter_id in coordinator.data.meters
+            for entity in (
+                *(
+                    MvmEnergySensor(coordinator, description, meter_id)
+                    for description in SENSORS
+                ),
+                MvmImportStatusSensor(coordinator, meter_id),
+                MvmLastSuccessfulRefreshSensor(coordinator, meter_id),
+            )
         ]
     )
 
@@ -70,13 +77,15 @@ class MvmEnergySensor(CoordinatorEntity[MvmMeterCoordinator], SensorEntity):
         self,
         coordinator: MvmMeterCoordinator,
         description: MvmSensorDescription,
+        meter_id: str,
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_unique_id = f"{coordinator.data.meter_id}_{description.series_key}"
+        self.meter_id = meter_id
+        self._attr_unique_id = f"{meter_id}_{description.series_key}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.data.meter_id)},
-            name=f"MVM Smart Meter {coordinator.data.meter_id}",
+            identifiers={(DOMAIN, meter_id)},
+            name=f"MVM Smart Meter {meter_id}",
             manufacturer="MVM",
             model="Smart meter CSV report",
         )
@@ -84,14 +93,19 @@ class MvmEnergySensor(CoordinatorEntity[MvmMeterCoordinator], SensorEntity):
     @property
     def available(self) -> bool:
         """Report unavailable if this report type/direction has no readings."""
+        meter = self.coordinator.data.meters.get(self.meter_id)
         return super().available and bool(
-            self.coordinator.data.series[self.entity_description.series_key]
+            meter
+            and meter.series[self.entity_description.series_key]
         )
 
     @property
     def native_value(self) -> Decimal | None:
         """Return the latest register or cumulative interval value."""
-        readings = self.coordinator.data.series[self.entity_description.series_key]
+        meter = self.coordinator.data.meters.get(self.meter_id)
+        if meter is None:
+            return None
+        readings = meter.series[self.entity_description.series_key]
         if self.entity_description.series_key.startswith("interval_"):
             return interval_cumulative(readings)
         return latest_value(readings)
@@ -103,10 +117,11 @@ class MvmImportStatusSensor(CoordinatorEntity[MvmMeterCoordinator], SensorEntity
     _attr_has_entity_name = True
     _attr_translation_key = "import_status"
 
-    def __init__(self, coordinator: MvmMeterCoordinator) -> None:
+    def __init__(self, coordinator: MvmMeterCoordinator, meter_id: str) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.data.meter_id}_import_status"
-        self._attr_device_info = _device_info(coordinator)
+        self.meter_id = meter_id
+        self._attr_unique_id = f"{meter_id}_import_status"
+        self._attr_device_info = _device_info(meter_id)
 
     @property
     def available(self) -> bool:
@@ -121,16 +136,18 @@ class MvmImportStatusSensor(CoordinatorEntity[MvmMeterCoordinator], SensorEntity
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Summarize imported report data without exposing report contents."""
+        meter = self.coordinator.data.meters.get(self.meter_id)
+        series = meter.series if meter else {}
         readings = tuple(
             reading
-            for series in self.coordinator.data.series.values()
-            for reading in series
+            for meter_series in series.values()
+            for reading in meter_series
         )
         return {
             "reading_counts": {
-                key: len(series)
-                for key, series in self.coordinator.data.series.items()
+                key: len(series.get(key, ())) for key in SERIES_KEYS
             },
+            "meter_present": meter is not None,
             "latest_imported_timestamp": _latest_timestamp(readings),
         }
 
@@ -144,10 +161,10 @@ class MvmLastSuccessfulRefreshSensor(
     _attr_has_entity_name = True
     _attr_translation_key = "last_successful_refresh"
 
-    def __init__(self, coordinator: MvmMeterCoordinator) -> None:
+    def __init__(self, coordinator: MvmMeterCoordinator, meter_id: str) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.data.meter_id}_last_successful_refresh"
-        self._attr_device_info = _device_info(coordinator)
+        self._attr_unique_id = f"{meter_id}_last_successful_refresh"
+        self._attr_device_info = _device_info(meter_id)
 
     @property
     def available(self) -> bool:
@@ -160,11 +177,11 @@ class MvmLastSuccessfulRefreshSensor(
         return self.coordinator.last_successful_refresh
 
 
-def _device_info(coordinator: MvmMeterCoordinator) -> DeviceInfo:
+def _device_info(meter_id: str) -> DeviceInfo:
     """Return the shared meter device information."""
     return DeviceInfo(
-        identifiers={(DOMAIN, coordinator.data.meter_id)},
-        name=f"MVM Smart Meter {coordinator.data.meter_id}",
+        identifiers={(DOMAIN, meter_id)},
+        name=f"MVM Smart Meter {meter_id}",
         manufacturer="MVM",
         model="Smart meter CSV report",
     )

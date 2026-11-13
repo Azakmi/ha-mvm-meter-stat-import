@@ -25,7 +25,11 @@ _HEADER = (
 
 
 def _write_report(
-    directory: Path, name: str, rows: list[tuple[str, str, str]], modified: int
+    directory: Path,
+    name: str,
+    rows: list[tuple[str, str, str]],
+    modified: int,
+    meter_id: str = "0000000000000000",
 ) -> None:
     """Write a small MVM-format report with a chosen file modification time."""
     path = directory / name
@@ -33,7 +37,7 @@ def _write_report(
         writer = csv.writer(report, delimiter=";")
         writer.writerow(_HEADER)
         writer.writerows(
-            ("0000000000000000", timestamp, direction, "Mért", value, "kWh")
+            (meter_id, timestamp, direction, "Mért", value, "kWh")
             for timestamp, direction, value in rows
         )
     path.touch()
@@ -69,8 +73,9 @@ class ReportImporterTests(unittest.TestCase):
             )
 
             data = load_reports(directory, "Europe/Budapest")
-            daily = data.series["daily_import"]
-            intervals = data.series["interval_import"]
+            series = data.meters["0000000000000000"].series
+            daily = series["daily_import"]
+            intervals = series["interval_import"]
 
             self.assertEqual(daily[-1].value, Decimal("112"))
             self.assertEqual(len(intervals), 2)
@@ -103,9 +108,9 @@ class ReportImporterTests(unittest.TestCase):
                 1_000_000_000,
             )
 
-            readings = load_reports(directory, "Europe/Budapest").series[
-                "interval_export"
-            ]
+            readings = load_reports(directory, "Europe/Budapest").meters[
+                "0000000000000000"
+            ].series["interval_export"]
             stats = build_statistics(readings, cumulative_register=False)
 
             self.assertEqual(len(stats), 2)
@@ -129,17 +134,18 @@ class ReportImporterTests(unittest.TestCase):
 
             data = load_reports(directory, "Europe/Budapest")
 
+            series = data.meters["0000000000000000"].series
             self.assertEqual(
-                [reading.value for reading in data.series["interval_import"]],
+                [reading.value for reading in series["interval_import"]],
                 [Decimal("0.1")],
             )
             self.assertEqual(
-                [reading.value for reading in data.series["interval_export"]],
+                [reading.value for reading in series["interval_export"]],
                 [Decimal("0.2")],
             )
-            self.assertNotIn("interval_net", data.series)
+            self.assertNotIn("interval_net", series)
             self.assertEqual(
-                [reading.value for reading in data.series["daily_net"]],
+                [reading.value for reading in series["daily_net"]],
                 [Decimal("-10")],
             )
 
@@ -157,7 +163,9 @@ class ReportImporterTests(unittest.TestCase):
                 1_000_000_000,
             )
 
-            readings = load_reports(directory, "Europe/Budapest").series["daily_net"]
+            readings = load_reports(directory, "Europe/Budapest").meters[
+                "0000000000000000"
+            ].series["daily_net"]
             stats = build_statistics(
                 readings, cumulative_register=True, signed_register=True
             )
@@ -191,7 +199,9 @@ class ReportImporterTests(unittest.TestCase):
                 1_000_000_000,
             )
 
-            readings = load_reports(directory, "Europe/Budapest").series["daily_net"]
+            readings = load_reports(directory, "Europe/Budapest").meters[
+                "0000000000000000"
+            ].series["daily_net"]
             stats = build_statistics(
                 readings,
                 cumulative_register=True,
@@ -223,7 +233,9 @@ class ReportImporterTests(unittest.TestCase):
                 1_000_000_000,
             )
 
-            readings = load_reports(directory, "Europe/Budapest").series["daily_net"]
+            readings = load_reports(directory, "Europe/Budapest").meters[
+                "0000000000000000"
+            ].series["daily_net"]
             stats = build_statistics(
                 readings,
                 cumulative_register=True,
@@ -256,6 +268,79 @@ class ReportImporterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with self.assertRaises(ReportError):
                 load_reports(Path(temp_dir), "Europe/Budapest")
+
+    def test_multiple_meters_keep_readings_and_statistics_separate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            path = directory / "shared.csv"
+            with path.open("w", encoding="utf-8-sig", newline="") as report:
+                writer = csv.writer(report, delimiter=";")
+                writer.writerow(_HEADER)
+                writer.writerows(
+                    (
+                        meter_id,
+                        "2026. 11. 01.",
+                        "Vételezett",
+                        "Mért",
+                        value,
+                        "kWh",
+                    )
+                    for meter_id, value in (
+                        ("meter-1", "100"),
+                        ("meter-2", "900"),
+                    )
+                )
+                writer.writerows(
+                    (
+                        meter_id,
+                        "2026. 11. 01. 10:00",
+                        "Visszatáplált",
+                        "Mért",
+                        value,
+                        "kWh",
+                    )
+                    for meter_id, value in (
+                        ("meter-1", "0.1"),
+                        ("meter-2", "0.9"),
+                    )
+                )
+                writer.writerows(
+                    (
+                        meter_id,
+                        "2026. 10. 25. 02:00",
+                        "Vételezett",
+                        "Mért",
+                        value,
+                        "kWh",
+                    )
+                    for meter_id, value in (
+                        ("meter-1", "1.1"),
+                        ("meter-1", "1.2"),
+                        ("meter-2", "2.1"),
+                        ("meter-2", "2.2"),
+                    )
+                )
+
+            data = load_reports(directory, "Europe/Budapest")
+
+            self.assertEqual(set(data.meters), {"meter-1", "meter-2"})
+            meter_1 = data.meters["meter-1"]
+            meter_2 = data.meters["meter-2"]
+            self.assertEqual(meter_1.series["daily_import"][0].value, Decimal("100"))
+            self.assertEqual(meter_2.series["daily_import"][0].value, Decimal("900"))
+            self.assertEqual(
+                meter_1.series["interval_export"][0].value, Decimal("0.1")
+            )
+            self.assertEqual(
+                meter_2.series["interval_export"][0].value, Decimal("0.9")
+            )
+            self.assertNotEqual(meter_1.signature, meter_2.signature)
+            for meter in (meter_1, meter_2):
+                repeated_hour = meter.series["interval_import"]
+                self.assertEqual(
+                    [reading.timestamp.astimezone(UTC).hour for reading in repeated_hour],
+                    [0, 1],
+                )
 
 
 if __name__ == "__main__":

@@ -19,7 +19,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the manual refresh button."""
-    async_add_entities([MvmRefreshButton(entry.runtime_data)])
+    async_add_entities(
+        [
+            MvmRefreshButton(entry.runtime_data, meter_id)
+            for meter_id in entry.runtime_data.data.meters
+        ]
+    )
 
 
 class MvmRefreshButton(CoordinatorEntity[MvmMeterCoordinator], ButtonEntity):
@@ -28,12 +33,12 @@ class MvmRefreshButton(CoordinatorEntity[MvmMeterCoordinator], ButtonEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "refresh"
 
-    def __init__(self, coordinator: MvmMeterCoordinator) -> None:
+    def __init__(self, coordinator: MvmMeterCoordinator, meter_id: str) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.data.meter_id}_refresh"
+        self._attr_unique_id = f"{meter_id}_refresh"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.data.meter_id)},
-            name=f"MVM Smart Meter {coordinator.data.meter_id}",
+            identifiers={(DOMAIN, meter_id)},
+            name=f"MVM Smart Meter {meter_id}",
             manufacturer="MVM",
             model="Smart meter CSV report",
         )

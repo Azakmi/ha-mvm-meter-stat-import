@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from . import MvmMeterCoordinator
-from .const import CONF_ROLLOVER_DAY, CONF_ROLLOVER_MONTH
+from .const import CONF_ROLLOVER_DAY, CONF_ROLLOVER_MONTH, SERIES_KEYS
 
 
 async def async_get_config_entry_diagnostics(
@@ -19,7 +19,8 @@ async def async_get_config_entry_diagnostics(
     latest_reading = max(
         (
             reading.timestamp
-            for readings in coordinator.data.series.values()
+            for meter in coordinator.data.meters.values()
+            for readings in meter.series.values()
             for reading in readings
         ),
         key=lambda timestamp: timestamp.timestamp(),
@@ -36,9 +37,13 @@ async def async_get_config_entry_diagnostics(
             "last_refresh_succeeded": coordinator.last_update_success,
             "last_successful_refresh": coordinator.last_successful_refresh,
             "reading_counts": {
-                key: len(readings)
-                for key, readings in coordinator.data.series.items()
+                key: sum(
+                    len(meter.series[key])
+                    for meter in coordinator.data.meters.values()
+                )
+                for key in SERIES_KEYS
             },
+            "meter_count": len(coordinator.data.meters),
             "latest_imported_timestamp": latest_reading,
         },
     }
