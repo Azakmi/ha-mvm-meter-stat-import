@@ -1,5 +1,7 @@
 """Config flow for MVM smart meter report imports."""
 
+from __future__ import annotations
+
 import calendar
 from pathlib import Path
 
