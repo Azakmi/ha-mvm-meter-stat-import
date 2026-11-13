@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MVM smart meter",
+        "description": "Choose a folder containing one meter's MVM semicolon-delimited CSV reports. New and overlapping reports in this folder are reconciled automatically. If your net balance resets annually, enter both rollover fields; otherwise leave both blank.",
+        "data": {
+          "directory": "CSV report folder",
+          "rollover_month": "Annual net balance rollover month (optional)",
+          "rollover_day": "Annual net balance rollover day (optional)"
+        }
+      }
+    },
+    "error": {
+      "directory_not_found": "The selected folder does not exist.",
+      "invalid_report": "No valid measured MVM energy data was found. Check the CSV format and meter serial.",
+      "invalid_rollover_date": "The annual rollover day is not valid for the selected month."
+    },
+    "abort": {
+      "already_configured": "This meter is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "import_status": {
+        "name": "Import status"
+      },
+      "last_successful_refresh": {
+        "name": "Last successful refresh"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh now"
+      }
+    }
+  }
+}

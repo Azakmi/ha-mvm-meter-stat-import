@@ -5,7 +5,7 @@ from datetime import timedelta
 from homeassistant.const import Platform
 
 DOMAIN = "mvm_meter_stat_import"
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.BUTTON, Platform.SENSOR]
 
 CONF_DIRECTORY = "directory"
 CONF_ROLLOVER_MONTH = "rollover_month"
