@@ -123,6 +123,31 @@ energy in the Energy dashboard. When an annual rollover is configured, its
 statistics account for that yearly cycle. Otherwise, each statistic retains the
 reported signed balance value.
 
+## Estimated yearly electricity bill
+
+Configure the yearly bill rates from the integration's **Configure** options.
+Enter the monthly fixed charge, export price per kWh, import price per kWh for
+the first 2,523 kWh, import price per kWh above 2,523 kWh, and an ISO 4217
+currency code. All four rates must be configured before the estimate is
+available; leaving any rate or the currency unset safely keeps it unavailable.
+The sensor is created separately for each meter.
+
+The estimate uses the latest reading in that meter's yearly net energy balance
+(`Szaldó`) series directly; it does not recalculate a balance from imported and
+exported meter readings. A nonnegative balance is charged at the first import
+rate for up to 2,523 kWh and at the second import rate for any excess. A
+negative balance earns an export-price credit for its absolute kWh value. The
+monthly fixed charge is multiplied by 12 and added in either case:
+
+`yearly estimate = 12 × monthly fixed cost + import charges − export credit`
+
+This is a full-year estimate, not a prorated bill: it assumes the configured
+monthly charge and rates apply for all 12 months and excludes taxes, fees, and
+other charges. The displayed value changes as new yearly-balance readings are
+imported. Configure the annual rollover date during setup when the report's
+yearly balance resets on a known date. The currency is explicit and is not
+inferred from meter data or tariff values.
+
 ## Overlapping reports
 
 Reports are merged by meter, reading type, direction, and absolute instant.

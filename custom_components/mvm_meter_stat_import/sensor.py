@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+import re
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -20,7 +21,17 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import MvmMeterCoordinator
-from .const import DOMAIN, SERIES_KEYS, STATISTIC_NAMES
+from .const import (
+    CONF_CURRENCY,
+    CONF_EXPORT_PRICE,
+    CONF_IMPORT_PRICE_ABOVE_THRESHOLD,
+    CONF_IMPORT_PRICE_FIRST_TIER,
+    CONF_MONTHLY_FIXED_COST,
+    DOMAIN,
+    IMPORT_PRICE_THRESHOLD_KWH,
+    SERIES_KEYS,
+    STATISTIC_NAMES,
+)
 from .importer import MeterReading, interval_cumulative, latest_value
 
 
@@ -60,6 +71,7 @@ async def async_setup_entry(
                     MvmEnergySensor(coordinator, description, meter_id)
                     for description in SENSORS
                 ),
+                MvmYearlyCostSensor(coordinator, meter_id),
                 MvmImportStatusSensor(coordinator, meter_id),
                 MvmLastSuccessfulRefreshSensor(coordinator, meter_id),
             )
@@ -152,6 +164,46 @@ class MvmImportStatusSensor(CoordinatorEntity[MvmMeterCoordinator], SensorEntity
         }
 
 
+class MvmYearlyCostSensor(CoordinatorEntity[MvmMeterCoordinator], SensorEntity):
+    """Estimate the yearly bill from the latest signed yearly saldo."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Estimated yearly electricity bill"
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator: MvmMeterCoordinator, meter_id: str) -> None:
+        super().__init__(coordinator)
+        self.meter_id = meter_id
+        self._attr_unique_id = f"{meter_id}_estimated_yearly_electricity_bill"
+        self._attr_device_info = _device_info(meter_id)
+        currency = coordinator.entry.options.get(CONF_CURRENCY)
+        if isinstance(currency, str) and re.fullmatch(r"[A-Z]{3}", currency):
+            self._attr_device_class = SensorDeviceClass.MONETARY
+            self._attr_native_unit_of_measurement = currency
+
+    @property
+    def available(self) -> bool:
+        """Require complete tariff configuration and a yearly saldo reading."""
+        meter = self.coordinator.data.meters.get(self.meter_id)
+        return (
+            super().available
+            and _yearly_tariff_values(self.coordinator.entry.options) is not None
+            and bool(meter and meter.series["daily_net"])
+        )
+
+    @property
+    def native_value(self) -> Decimal | None:
+        """Return the estimated annual charge in the configured currency."""
+        meter = self.coordinator.data.meters.get(self.meter_id)
+        tariffs = _yearly_tariff_values(self.coordinator.entry.options)
+        if meter is None or tariffs is None:
+            return None
+        balance = latest_value(meter.series["daily_net"])
+        if balance is None:
+            return None
+        return estimate_yearly_cost(balance, **tariffs)
+
+
 class MvmLastSuccessfulRefreshSensor(
     CoordinatorEntity[MvmMeterCoordinator], SensorEntity
 ):
@@ -193,4 +245,53 @@ def _latest_timestamp(readings: tuple[MeterReading, ...]) -> datetime | None:
         (reading.timestamp for reading in readings),
         key=lambda timestamp: timestamp.timestamp(),
         default=None,
+    )
+
+
+def _yearly_tariff_values(options: dict[str, Any]) -> dict[str, Decimal] | None:
+    """Return complete, non-negative tariff values or no estimate configuration."""
+    keys = (
+        CONF_MONTHLY_FIXED_COST,
+        CONF_EXPORT_PRICE,
+        CONF_IMPORT_PRICE_FIRST_TIER,
+        CONF_IMPORT_PRICE_ABOVE_THRESHOLD,
+    )
+    if not all(key in options for key in (*keys, CONF_CURRENCY)):
+        return None
+    if not isinstance(options[CONF_CURRENCY], str) or not re.fullmatch(
+        r"[A-Z]{3}", options[CONF_CURRENCY]
+    ):
+        return None
+    try:
+        values = {key: Decimal(str(options[key])) for key in keys}
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if any(not value.is_finite() or value < 0 for value in values.values()):
+        return None
+    return {
+        "monthly_fixed_cost": values[CONF_MONTHLY_FIXED_COST],
+        "export_price": values[CONF_EXPORT_PRICE],
+        "import_price_first_tier": values[CONF_IMPORT_PRICE_FIRST_TIER],
+        "import_price_above_threshold": values[CONF_IMPORT_PRICE_ABOVE_THRESHOLD],
+    }
+
+
+def estimate_yearly_cost(
+    net_balance: Decimal,
+    *,
+    monthly_fixed_cost: Decimal,
+    export_price: Decimal,
+    import_price_first_tier: Decimal,
+    import_price_above_threshold: Decimal,
+) -> Decimal:
+    """Estimate 12 months of fixed charges plus the balance-based energy cost."""
+    fixed_cost = monthly_fixed_cost * 12
+    if net_balance < 0:
+        return fixed_cost - abs(net_balance) * export_price
+    first_tier_kwh = min(net_balance, Decimal(IMPORT_PRICE_THRESHOLD_KWH))
+    above_tier_kwh = max(net_balance - IMPORT_PRICE_THRESHOLD_KWH, Decimal(0))
+    return (
+        fixed_cost
+        + first_tier_kwh * import_price_first_tier
+        + above_tier_kwh * import_price_above_threshold
     )
