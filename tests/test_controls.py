@@ -7,11 +7,13 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
+from homeassistant.components.sensor import SensorDeviceClass
 from custom_components.mvm_meter_stat_import import (
     MvmMeterCoordinator,
     async_migrate_entry,
 )
 from custom_components.mvm_meter_stat_import.button import MvmRefreshButton
+from custom_components.mvm_meter_stat_import.config_flow import ConfigFlow
 from custom_components.mvm_meter_stat_import.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -25,7 +27,9 @@ from custom_components.mvm_meter_stat_import.sensor import (
     MvmEnergySensor,
     MvmImportStatusSensor,
     MvmLastSuccessfulRefreshSensor,
+    MvmYearlyCostSensor,
     SENSORS,
+    estimate_yearly_cost,
 )
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
@@ -268,6 +272,120 @@ class ImportControlsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("/private/config/mvm-reports", serialized)
         self.assertNotIn("private-report.csv", serialized)
         self.assertNotIn("987654.321", serialized)
+
+
+class YearlyCostSensorTests(unittest.TestCase):
+    """Verify tariff estimates use the latest signed yearly saldo."""
+
+    def setUp(self) -> None:
+        reading = MeterReading(
+            timestamp=datetime(2026, 11, 12, tzinfo=UTC),
+            value=Decimal("1000"),
+            priority=(1, "report.csv", 2),
+        )
+        self.options = {
+            "monthly_fixed_cost": 10,
+            "export_price": 0.05,
+            "import_price_first_tier": 0.2,
+            "import_price_above_threshold": 0.3,
+            "currency": "EUR",
+        }
+        self.coordinator = Mock()
+        self.coordinator.data = ReportData(
+            meters={
+                "meter-1": MeterData(
+                    meter_id="meter-1",
+                    series={
+                        "daily_import": (),
+                        "daily_export": (),
+                        "interval_import": (),
+                        "interval_export": (),
+                        "daily_net": (reading,),
+                    },
+                )
+            }
+        )
+        self.coordinator.entry.options = self.options
+        self.coordinator.async_add_listener.return_value = lambda: None
+        self.sensor = MvmYearlyCostSensor(self.coordinator, "meter-1")
+
+    def test_import_tiers_below_at_and_above_threshold(self) -> None:
+        rates = {
+            "monthly_fixed_cost": Decimal("10"),
+            "export_price": Decimal("0.05"),
+            "import_price_first_tier": Decimal("0.2"),
+            "import_price_above_threshold": Decimal("0.3"),
+        }
+
+        self.assertEqual(
+            estimate_yearly_cost(Decimal("1000"), **rates), Decimal("320.0")
+        )
+        self.assertEqual(
+            estimate_yearly_cost(Decimal("2523"), **rates), Decimal("624.60")
+        )
+        self.assertEqual(
+            estimate_yearly_cost(Decimal("3000"), **rates), Decimal("767.70")
+        )
+
+    def test_negative_saldo_receives_export_credit_and_fixed_cost(self) -> None:
+        self.assertEqual(self.sensor.native_value, Decimal("320.00"))
+
+        readings = self.coordinator.data.meters["meter-1"].series["daily_net"]
+        self.coordinator.data.meters["meter-1"].series["daily_net"] = (
+            MeterReading(readings[0].timestamp, Decimal("-1000"), readings[0].priority),
+        )
+        self.assertEqual(self.sensor.native_value, Decimal("70.00"))
+
+        self.coordinator.data.meters["meter-1"].series["daily_net"] = (
+            MeterReading(readings[0].timestamp, Decimal("0"), readings[0].priority),
+        )
+        self.assertEqual(self.sensor.native_value, Decimal("120"))
+
+    def test_currency_metadata_and_missing_configuration_or_saldo(self) -> None:
+        self.assertEqual(
+            self.sensor.device_class, SensorDeviceClass.MONETARY
+        )
+        self.assertEqual(self.sensor.native_unit_of_measurement, "EUR")
+        self.assertTrue(self.sensor.available)
+
+        del self.options["import_price_first_tier"]
+        self.assertFalse(self.sensor.available)
+        self.assertIsNone(self.sensor.native_value)
+        self.options["import_price_first_tier"] = 0.2
+        self.coordinator.data.meters["meter-1"].series["daily_net"] = ()
+        self.assertFalse(self.sensor.available)
+        self.assertIsNone(self.sensor.native_value)
+
+
+class YearlyCostOptionsTests(unittest.IsolatedAsyncioTestCase):
+    """Verify tariff options are stored with an explicit uppercase currency."""
+
+    async def test_currency_is_normalized_and_empty_options_are_allowed(self) -> None:
+        flow = ConfigFlow.async_get_options_flow(None)
+        flow.async_create_entry = Mock(return_value={"type": "create_entry"})
+        values = {
+            "monthly_fixed_cost": 10.5,
+            "export_price": 0.05,
+            "import_price_first_tier": 0.2,
+            "import_price_above_threshold": 0.3,
+            "currency": "eur",
+        }
+
+        result = await flow.async_step_init(values)
+
+        self.assertEqual(result, {"type": "create_entry"})
+        flow.async_create_entry.assert_called_once_with(
+            title="",
+            data={
+                **values,
+                "currency": "EUR",
+            },
+        )
+
+        empty_flow = ConfigFlow.async_get_options_flow(None)
+        empty_flow.async_create_entry = Mock(return_value={"type": "create_entry"})
+        await empty_flow.async_step_init({})
+        empty_flow.async_create_entry.assert_called_once_with(title="", data={})
 
 
 if __name__ == "__main__":

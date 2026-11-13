@@ -18,20 +18,35 @@
     },
     "abort": {
       "already_configured": "This report folder is already configured."
-    },
-    "entity": {
-      "sensor": {
-        "import_status": {
-          "name": "Import status"
-        },
-        "last_successful_refresh": {
-          "name": "Last successful refresh"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Yearly electricity bill",
+        "description": "Set all four rates and an ISO 4217 currency code to enable the estimate. Leave fields blank to make the estimate unavailable.",
+        "data": {
+          "monthly_fixed_cost": "Monthly fixed cost",
+          "export_price": "Export price per kWh",
+          "import_price_first_tier": "Import price per kWh up to 2,523 kWh",
+          "import_price_above_threshold": "Import price per kWh above 2,523 kWh",
+          "currency": "Currency (ISO 4217 code)"
         }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "import_status": {
+        "name": "Import status"
       },
-      "button": {
-        "refresh": {
-          "name": "Refresh now"
-        }
+      "last_successful_refresh": {
+        "name": "Last successful refresh"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh now"
       }
     }
   }

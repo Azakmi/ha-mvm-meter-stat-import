@@ -10,6 +10,12 @@ PLATFORMS = [Platform.BUTTON, Platform.SENSOR]
 CONF_DIRECTORY = "directory"
 CONF_ROLLOVER_MONTH = "rollover_month"
 CONF_ROLLOVER_DAY = "rollover_day"
+CONF_MONTHLY_FIXED_COST = "monthly_fixed_cost"
+CONF_EXPORT_PRICE = "export_price"
+CONF_IMPORT_PRICE_FIRST_TIER = "import_price_first_tier"
+CONF_IMPORT_PRICE_ABOVE_THRESHOLD = "import_price_above_threshold"
+CONF_CURRENCY = "currency"
+IMPORT_PRICE_THRESHOLD_KWH = 2523
 UPDATE_INTERVAL = timedelta(minutes=15)
 
 DATASET_DAILY = "daily"
