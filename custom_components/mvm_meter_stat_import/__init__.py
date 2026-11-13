@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from homeassistant.components.recorder.models import (
@@ -15,6 +16,7 @@ from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import EnergyConverter
 
 from .const import (
@@ -47,6 +49,7 @@ class MvmMeterCoordinator(DataUpdateCoordinator[MeterData]):
         )
         self.entry = entry
         self._signature: tuple | None = None
+        self.last_successful_refresh: datetime | None = None
 
     async def _async_update_data(self) -> MeterData:
         """Read reports and replace statistics only when their data changes."""
@@ -59,39 +62,40 @@ class MvmMeterCoordinator(DataUpdateCoordinator[MeterData]):
         except ReportError as err:
             raise UpdateFailed(str(err)) from err
 
-        if data.signature == self._signature:
-            return data
+        if data.signature != self._signature:
+            try:
+                for key in SERIES_KEYS:
+                    readings = data.series[key]
+                    if not readings:
+                        continue
+                    metadata: StatisticMetaData = {
+                        "mean_type": StatisticMeanType.NONE,
+                        "has_sum": True,
+                        "name": f"{data.meter_id} {STATISTIC_NAMES[key]}",
+                        "source": DOMAIN,
+                        "statistic_id": f"{DOMAIN}:{data.meter_id}_{key}",
+                        "unit_class": EnergyConverter.UNIT_CLASS,
+                        "unit_of_measurement": UnitOfEnergy.KILO_WATT_HOUR,
+                    }
+                    async_add_external_statistics(
+                        self.hass,
+                        metadata,
+                        build_statistics(
+                            readings,
+                            cumulative_register=key.startswith(DATASET_DAILY),
+                            signed_register=key == f"{DATASET_DAILY}_{DIRECTION_NET}",
+                            rollover_month=self.entry.data.get(CONF_ROLLOVER_MONTH),
+                            rollover_day=self.entry.data.get(CONF_ROLLOVER_DAY),
+                        ),
+                    )
+            except (HomeAssistantError, ValueError) as err:
+                _LOGGER.exception("Unable to import MVM meter statistics")
+                raise UpdateFailed(
+                    f"Unable to import meter statistics: {err}"
+                ) from err
 
-        try:
-            for key in SERIES_KEYS:
-                readings = data.series[key]
-                if not readings:
-                    continue
-                metadata: StatisticMetaData = {
-                    "mean_type": StatisticMeanType.NONE,
-                    "has_sum": True,
-                    "name": f"{data.meter_id} {STATISTIC_NAMES[key]}",
-                    "source": DOMAIN,
-                    "statistic_id": f"{DOMAIN}:{data.meter_id}_{key}",
-                    "unit_class": EnergyConverter.UNIT_CLASS,
-                    "unit_of_measurement": UnitOfEnergy.KILO_WATT_HOUR,
-                }
-                async_add_external_statistics(
-                    self.hass,
-                    metadata,
-                    build_statistics(
-                        readings,
-                        cumulative_register=key.startswith(DATASET_DAILY),
-                        signed_register=key == f"{DATASET_DAILY}_{DIRECTION_NET}",
-                        rollover_month=self.entry.data.get(CONF_ROLLOVER_MONTH),
-                        rollover_day=self.entry.data.get(CONF_ROLLOVER_DAY),
-                    ),
-                )
-        except (HomeAssistantError, ValueError) as err:
-            _LOGGER.exception("Unable to import MVM meter statistics")
-            raise UpdateFailed(f"Unable to import meter statistics: {err}") from err
-
-        self._signature = data.signature
+            self._signature = data.signature
+        self.last_successful_refresh = dt_util.utcnow()
         return data
 
 

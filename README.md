@@ -72,8 +72,16 @@ values have been replaced.
 
 The integration creates five latest-value sensors: daily imported/exported
 registers, cumulative 15-minute imported/exported energy, and the yearly net
-energy balance (`Szaldó`). It also imports long-term statistics for all five
-series. Select the corresponding
+energy balance (`Szaldó`). It also provides an **Import status** sensor, a
+**Last successful refresh** timestamp, and a **Refresh now** button on the meter
+device. Import status remains available when a refresh fails, reports the latest
+refresh outcome, and includes reading counts and the latest imported timestamp.
+The refresh button remains available to recover from a failed refresh.
+Download diagnostics from the integration's config entry to see refresh health,
+reading counts, and the newest imported timestamp. Diagnostics omit the meter
+serial, configured folder, and report contents.
+
+The integration imports long-term statistics for all five series. Select the corresponding
 `MVM Smart Meter Statistics Import` statistics in the Energy dashboard:
 
 - Daily imported energy

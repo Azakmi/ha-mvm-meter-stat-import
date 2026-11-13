@@ -18,6 +18,21 @@
     },
     "abort": {
       "already_configured": "This meter is already configured."
+    },
+    "entity": {
+      "sensor": {
+        "import_status": {
+          "name": "Import status"
+        },
+        "last_successful_refresh": {
+          "name": "Last successful refresh"
+        }
+      },
+      "button": {
+        "refresh": {
+          "name": "Refresh now"
+        }
+      }
     }
   }
 }
