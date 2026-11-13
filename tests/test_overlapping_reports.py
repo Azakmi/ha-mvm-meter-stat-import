@@ -41,7 +41,7 @@ class OverlappingReportFixtureTests(unittest.TestCase):
             ("daily_import", ["100.0", "101.0", "102.5", "104.0", "105.5"]),
             ("daily_export", ["10.0", "10.5", "11.0", "11.5", "12.0"]),
         ):
-            readings = data.series[series_key]
+            readings = data.meters["0000000000000000"].series[series_key]
             self.assertEqual(len(readings), 5)
             self.assertEqual(
                 [reading.timestamp.date().isoformat() for reading in readings],

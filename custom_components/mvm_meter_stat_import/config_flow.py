@@ -14,7 +14,7 @@ from .importer import ReportError, load_reports
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Configure a folder containing MVM smart meter CSV reports."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict | None = None
@@ -36,16 +36,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "directory_not_found"
             elif "base" not in errors:
                 try:
-                    data = await self.hass.async_add_executor_job(
+                    await self.hass.async_add_executor_job(
                         load_reports, directory, self.hass.config.time_zone
                     )
                 except ReportError:
                     errors["base"] = "invalid_report"
                 else:
-                    await self.async_set_unique_id(data.meter_id)
+                    await self.async_set_unique_id(directory.as_posix())
                     self._abort_if_unique_id_configured()
                     return self.async_create_entry(
-                        title=f"MVM Smart Meter {data.meter_id}",
+                        title=f"MVM reports ({directory.name})",
                         data={
                             CONF_DIRECTORY: str(directory),
                             **(

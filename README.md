@@ -49,9 +49,11 @@ volume is retained).
 
 In **Settings → Devices & services → Add integration**, select **MVM Smart Meter
 Statistics Import** and enter a folder path on the Home Assistant host. The
-folder must already contain at least one valid MVM report. Keep reports for one
-meter in each folder, and do not place unrelated CSV files there. The integration
-uses Home Assistant's configured time zone and checks the folder every 15 minutes.
+folder must already contain valid measured MVM report data. Reports for multiple
+meter serial numbers may share a folder; the integration creates a separate
+device and statistics series for each meter. Do not place unrelated CSV files
+there. The integration uses Home Assistant's configured time zone and checks the
+folder every 15 minutes.
 If the net balance is billed on a yearly cycle, enter its rollover month and day
 during setup. Leave both fields blank for users without an annual saldo cycle.
 
@@ -70,19 +72,20 @@ values have been replaced.
 
 ## Energy dashboard
 
-The integration creates five latest-value sensors: daily imported/exported
-registers, cumulative 15-minute imported/exported energy, and the yearly net
-energy balance (`Szaldó`). It also provides an **Import status** sensor, a
-**Last successful refresh** timestamp, and a **Refresh now** button on the meter
-device. Import status remains available when a refresh fails, reports the latest
-refresh outcome, and includes reading counts and the latest imported timestamp.
+Each meter gets five latest-value sensors: daily imported/exported registers,
+cumulative 15-minute imported/exported energy, and the yearly net energy balance
+(`Szaldó`). It also gets an **Import status** sensor, a **Last successful
+refresh** timestamp, and a **Refresh now** button. Import status remains
+available when a refresh fails, reports the latest refresh outcome, and includes
+reading counts and the latest imported timestamp.
 The refresh button remains available to recover from a failed refresh.
 Download diagnostics from the integration's config entry to see refresh health,
 reading counts, and the newest imported timestamp. Diagnostics omit the meter
 serial, configured folder, and report contents.
 
-The integration imports long-term statistics for all five series. Select the corresponding
-`MVM Smart Meter Statistics Import` statistics in the Energy dashboard:
+The integration imports long-term statistics for all five series. Select the
+corresponding `MVM Smart Meter Statistics Import` statistics in the Energy
+dashboard:
 
 - Daily imported energy
 - Daily exported energy

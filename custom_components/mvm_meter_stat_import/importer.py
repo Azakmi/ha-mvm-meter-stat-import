@@ -69,6 +69,25 @@ class MeterData:
         )
 
 
+@dataclass(frozen=True)
+class ReportData:
+    """Reconciled readings for every meter found in a report folder."""
+
+    meters: dict[str, MeterData]
+
+    @property
+    def signature(
+        self,
+    ) -> tuple[
+        tuple[str, tuple[tuple[str, tuple[tuple[float, Decimal], ...]], ...]], ...
+    ]:
+        """Return a stable signature for all meter series."""
+        return tuple(
+            (meter_id, meter.signature)
+            for meter_id, meter in sorted(self.meters.items())
+        )
+
+
 def _parse_timestamp(value: str) -> tuple[datetime, str]:
     """Parse a report timestamp and return its dataset type."""
     value = value.strip()
@@ -100,7 +119,7 @@ def _localize(
     return candidates[min(occurrence, len(candidates) - 1)]
 
 
-def load_reports(directory: Path, timezone_name: str) -> MeterData:
+def load_reports(directory: Path, timezone_name: str) -> ReportData:
     """Load all CSV reports from a directory, with newer files winning overlaps."""
     try:
         timezone = ZoneInfo(timezone_name)
@@ -115,7 +134,7 @@ def load_reports(directory: Path, timezone_name: str) -> MeterData:
         raise ReportError(f"No CSV reports found in {directory}")
 
     resolved: dict[
-        tuple[str, datetime], tuple[tuple[int, str, int], MeterReading]
+        tuple[str, str, datetime], tuple[tuple[int, str, int], MeterReading]
     ] = {}
     meter_ids: set[str] = set()
 
@@ -129,7 +148,9 @@ def load_reports(directory: Path, timezone_name: str) -> MeterData:
                 ):
                     raise ReportError(f"{path.name}: missing MVM report columns")
 
-                ambiguous_occurrences: dict[tuple[str, datetime], int] = {}
+                ambiguous_occurrences: dict[
+                    tuple[str, str, datetime], int
+                ] = {}
                 for row_number, row in enumerate(reader, start=2):
                     if not row.get("Időpont"):
                         raise ReportError(
@@ -139,6 +160,12 @@ def load_reports(directory: Path, timezone_name: str) -> MeterData:
                     status = (row.get("Státusz") or "").strip()
                     if status != "Mért":
                         continue
+
+                    meter_id = (row.get("Gyári szám") or "").strip()
+                    if not meter_id:
+                        raise ReportError(
+                            f"{path.name}:{row_number}: missing meter serial"
+                        )
 
                     direction_name = (row.get("Adatpont típus") or "").strip()
                     if direction_name not in _DIRECTIONS:
@@ -171,28 +198,18 @@ def load_reports(directory: Path, timezone_name: str) -> MeterData:
                             "only net balance readings may be negative"
                         )
 
-                    occurrence_key = (direction, timestamp)
+                    occurrence_key = (meter_id, direction, timestamp)
                     occurrence = ambiguous_occurrences.get(occurrence_key, 0)
                     localized = _localize(timestamp, timezone, occurrence)
                     ambiguous_occurrences[occurrence_key] = occurrence + 1
 
-                    meter_id = (row.get("Gyári szám") or "").strip()
-                    if not meter_id:
-                        raise ReportError(
-                            f"{path.name}:{row_number}: missing meter serial"
-                        )
                     meter_ids.add(meter_id)
-                    if len(meter_ids) > 1:
-                        raise ReportError(
-                            "CSV reports from multiple meters cannot share one "
-                            "directory"
-                        )
 
                     key = f"{dataset}_{direction}"
                     instant = localized.astimezone(UTC)
                     priority = (modified, path.name, row_number)
                     reading = MeterReading(localized, value, priority)
-                    map_key = (key, instant)
+                    map_key = (meter_id, key, instant)
                     previous = resolved.get(map_key)
                     if previous is None or priority > previous[0]:
                         resolved[map_key] = (priority, reading)
@@ -202,21 +219,28 @@ def load_reports(directory: Path, timezone_name: str) -> MeterData:
     if not resolved:
         raise ReportError(f"No measured energy readings found in {directory}")
 
-    series: dict[str, list[MeterReading]] = {key: [] for key in SERIES_KEYS}
-    for (series_key, _), (_, reading) in resolved.items():
-        series[series_key].append(reading)
+    series_by_meter: dict[str, dict[str, list[MeterReading]]] = {
+        meter_id: {key: [] for key in SERIES_KEYS} for meter_id in meter_ids
+    }
+    for (meter_id, series_key, _), (_, reading) in resolved.items():
+        series_by_meter[meter_id][series_key].append(reading)
 
-    return MeterData(
-        meter_id=next(iter(meter_ids)),
-        series={
-            key: tuple(
-                sorted(
-                    readings,
-                    key=lambda reading: reading.timestamp.astimezone(UTC),
-                )
+    return ReportData(
+        meters={
+            meter_id: MeterData(
+                meter_id=meter_id,
+                series={
+                    key: tuple(
+                        sorted(
+                            readings,
+                            key=lambda reading: reading.timestamp.astimezone(UTC),
+                        )
+                    )
+                    for key, readings in series.items()
+                },
             )
-            for key, readings in series.items()
-        },
+            for meter_id, series in series_by_meter.items()
+        }
     )
 
 
