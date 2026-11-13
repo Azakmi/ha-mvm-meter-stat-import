@@ -64,6 +64,28 @@ energy amounts. Measured interval `Szaldó` rows are ignored; daily `Szaldó`
 readings are retained. Other imported rows must be measured and expressed in
 kWh.
 
+## Downloading reports from MVM
+
+1. Sign in to [MVM Next online customer service](https://onlineugyintezes.mvmnext.hu/)
+   and select the electricity supply point or meter whose data you need.
+2. Open the portal's consumption or meter-data area, set the date range, and
+   export the report as CSV. Portal labels and available options can change.
+3. Choose the data type you need:
+   - For interval data, choose **15-minute** resolution. The CSV should have
+     timestamps with a time, such as `2026. 11. 01. 10:00`, and measured import
+     and/or export amounts for each interval.
+   - For daily absolute readings, choose daily or register readings rather than
+     15-minute consumption. The CSV should have date-only rows, such as
+     `2026. 11. 01.`, with the daily import and/or export register values.
+4. Check that the downloaded CSV has the meter serial number and the MVM
+   columns and semicolon delimiter used by the files in `example_data`.
+   Measured interval import/export and daily absolute import/export readings
+   are supported. Interval `Szaldó` rows are skipped; daily `Szaldó` is retained.
+5. Copy the CSV into the report folder configured in Home Assistant. The
+   integration refreshes reports from that folder every 15 minutes; you can
+   also use that meter's **Refresh now** button. One folder can contain reports
+   for multiple meter serial numbers, but should not contain unrelated CSVs.
+
 ## Example data
 
 The `sample_*.csv` files in `example_data` are shortened, synthetic examples.
